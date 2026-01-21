@@ -1,0 +1,36 @@
+{
+  "name": "Pet Cat Pack",
+
+  "variants": [
+    "cat_1",
+    "cat_2",
+    "cat_3",
+    "cat_4",
+    "cat_5",
+    "cat_6"
+  ],
+
+  "base": {
+    "HIGH": "run",
+    "MEDIUM": "walk",
+    "LOW": "idle",
+    "CRITICAL": "sleeping_1",
+    "CHARGING": "licking_1"
+  },
+
+  "tap": {
+    "HIGH": ["meow", "stretching"],
+    "MEDIUM": ["stretching", "itch"],
+    "LOW": ["sitting", "laying"],
+    "CRITICAL": [],
+    "CHARGING": ["licking_2", "meow"]
+  },
+
+  "fps": {
+    "HIGH": 12,
+    "MEDIUM": 8,
+    "LOW": 4,
+    "CRITICAL": 0,
+    "CHARGING": 8
+  }
+}
