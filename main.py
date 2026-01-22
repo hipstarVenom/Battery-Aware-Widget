@@ -1,6 +1,7 @@
 import psutil
 import time
 import json
+import random
 from pathlib import Path
 import pygame as py
 
@@ -20,8 +21,26 @@ SCALE = 2.0
 MENU_SIZE = (360, 260)
 PET_SIZE = (140, 140)
 
+TRANSPARENT_COLOR = (255, 0, 255)  # magic pink
+FPS_IDLE = 2
+
 FONT = py.font.SysFont(None, 16)
 HIGHLIGHT_COLOR = (255, 255, 0)
+
+# ---------------- WINDOW POSITION HELPERS ---------------- #
+
+def get_window_pos():
+    try:
+        return py.display.get_window_position()
+    except:
+        return None
+
+def set_window_pos(pos):
+    if pos:
+        try:
+            py.display.set_window_position(pos[0], pos[1])
+        except:
+            pass
 
 # ---------------- CONFIG ---------------- #
 
@@ -148,73 +167,101 @@ def select_cat_menu(window, initial_cat):
             window.blit(frame, (x, y))
 
         preview_index = (preview_index + 1) % len(preview_frames)
-
         py.display.flip()
         clock.tick(10)
 
-# ---------------- PET MODE ---------------- #
+# ---------------- PET MODE (WITH INTERACTION) ---------------- #
 
 def run_pet(window, skin, variant):
+    clock = py.time.Clock()
+
     last_state = None
     frames = []
-    frame_index = 0
-    current_fps = 0
+    base_index = 0
 
-    clock = py.time.Clock()
+    interaction_frames = None
+    interaction_index = 0
+
+    fps = FPS_IDLE
     last_battery_check = 0
 
     while True:
         for event in py.event.get():
             if event.type == py.QUIT:
                 return "QUIT"
+
             if event.type == py.KEYDOWN and event.key == py.K_ESCAPE:
                 return "MENU"
 
+            if event.type == py.MOUSEBUTTONDOWN:
+                if interaction_frames is None:
+                    percent, charging = get_battery_info()
+                    state = "LOW" if percent is None else percent_to_state(percent, charging)
+                    tap_list = skin["tap"].get(state, [])
+                    if tap_list:
+                        anim = random.choice(tap_list)
+                        interaction_frames = load_frames(
+                            SKIN_DIR / variant / f"{anim}.png"
+                        )
+                        interaction_index = 0
+                        fps = skin["fps"].get(state, 6)
+
         now = time.time()
-        if now - last_battery_check >= 60:
+        if now - last_battery_check >= 60 and interaction_frames is None:
             percent, charging = get_battery_info()
-            state = "NO_BATTERY" if percent is None else percent_to_state(percent, charging)
+            state = "LOW" if percent is None else percent_to_state(percent, charging)
             last_battery_check = now
 
             if state != last_state:
-                animation = skin["base"].get(state)
-                current_fps = skin["fps"].get(state, 0)
-                frames = load_frames(SKIN_DIR / variant / f"{animation}.png")
-                frame_index = 0
+                anim = skin["base"].get(state)
+                fps = skin["fps"].get(state, FPS_IDLE)
+                frames = load_frames(SKIN_DIR / variant / f"{anim}.png")
+                base_index = 0
                 last_state = state
 
-        window.fill((0, 0, 0))
-        if frames:
-            frame = frames[frame_index]
+        window.fill(TRANSPARENT_COLOR)
+
+        if interaction_frames:
+            if interaction_index >= len(interaction_frames):
+                interaction_frames = None
+                interaction_index = 0
+            else:
+                frame = interaction_frames[interaction_index]
+                interaction_index += 1
+        elif frames:
+            if base_index >= len(frames):
+                base_index = 0
+            frame = frames[base_index]
+            base_index += 1
+        else:
+            frame = None
+
+        if frame:
             x = (PET_SIZE[0] - frame.get_width()) // 2
             y = (PET_SIZE[1] - frame.get_height()) // 2
             window.blit(frame, (x, y))
-            if current_fps > 0:
-                frame_index = (frame_index + 1) % len(frames)
 
-        py.display.flip()
-        clock.tick(current_fps if current_fps > 0 else 2)
+        py.display.update()
+        clock.tick(fps if fps > 0 else FPS_IDLE)
 
 # ---------------- APP ---------------- #
 
 def main():
     skin = load_skin()
     config = load_config()
-
     current_cat = config["selected_cat"]
 
     if config["first_run"]:
         window = py.display.set_mode(MENU_SIZE)
         new_cat = select_cat_menu(window, current_cat)
-
         if not new_cat:
             py.quit()
             return
-
         current_cat = new_cat
         save_config(current_cat)
 
-    window = py.display.set_mode(PET_SIZE)
+    window = py.display.set_mode(PET_SIZE, py.NOFRAME)
+    window.set_colorkey(TRANSPARENT_COLOR)
 
     while True:
         result = run_pet(window, skin, current_cat)
@@ -223,15 +270,21 @@ def main():
             break
 
         if result == "MENU":
+            pos = get_window_pos()
             window = py.display.set_mode(MENU_SIZE)
-            new_cat = select_cat_menu(window, current_cat)
+            set_window_pos(pos)
 
+            new_cat = select_cat_menu(window, current_cat)
             if not new_cat:
                 break
 
             current_cat = new_cat
             save_config(current_cat)
-            window = py.display.set_mode(PET_SIZE)
+
+            pos = get_window_pos()
+            window = py.display.set_mode(PET_SIZE, py.NOFRAME)
+            window.set_colorkey(TRANSPARENT_COLOR)
+            set_window_pos(pos)
 
     py.quit()
 
